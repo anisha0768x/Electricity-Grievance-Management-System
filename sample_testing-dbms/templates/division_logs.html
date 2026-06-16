@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Logs - MSEDCL Division</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='division_styles.css') }}" rel="stylesheet">
+    <style>
+        .logs-container {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            background-color: #f8f9fa;
+        }
+        .log-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .log-type {
+            font-weight: 600;
+            color: #495057;
+        }
+        .log-time {
+            color: #6c757d;
+            font-size: 0.875rem;
+        }
+        .log-details {
+            color: #495057;
+            line-height: 1.5;
+        }
+        .log-details strong {
+            color: #343a40;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: #dc3545;
+            color: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+            border: none;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+            background: #c82333;
+        }
+        .stat-card.active {
+            background: #b02a37;
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+        }
+        .stat-number {
+            display: block;
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: white;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            color: white;
+        }
+        .dynamic-filters-container {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid #e9ecef;
+        }
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            align-items: end;
+        }
+        .dynamic-filters-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .export-buttons {
+            display: flex;
+            gap: 0.5rem;
+            align-items: end;
+        }
+        .nav-tabs .nav-link.active {
+            background-color: #dc3545;
+            color: white;
+            border-color: #dc3545;
+        }
+        .nav-tabs .nav-link {
+            color: #495057;
+        }
+        .tab-content {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            padding: 1.5rem;
+        }
+        .json-data {
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+        .btn-msedcl {
+            background-color: #dc3545;
+            border-color: #dc3545;
+            color: white;
+        }
+        .btn-msedcl:hover {
+            background-color: #c82333;
+            border-color: #bd2130;
+            color: white;
+        }
+        .common-filters {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            border: 1px solid #e9ecef;
+        }
+        .logs-table {
+            width: 100%;
+            font-size: 0.875rem;
+        }
+        .logs-table th {
+            background-color: #dc3545;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            position: relative;
+        }
+        .logs-table th:hover {
+            background-color: #c82333;
+        }
+        .filter-indicator {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #ffeb3b;
+        }
+        .table-responsive {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('division_dashboard') }}">
+                <i class="fas fa-bolt me-2"></i>
+                MSEDCL Division Head Portal
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text me-3">
+                    <i class="fas fa-user me-1"></i> {{ user_name }} | {{ division_name }}
+                </span>
+                <a class="nav-link" href="/logout">
+                    <i class="fas fa-sign-out-alt me-1"></i> Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 sidebar p-0">
+                <div class="d-flex flex-column p-3">
+                    <ul class="nav nav-pills flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('division_dashboard') }}">
+                                <i class="fas fa-tachometer-alt"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('division_issues') }}">
+                                <i class="fas fa-exclamation-circle"></i> Issues Management
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('division_workers') }}">
+                                <i class="fas fa-users"></i> Workers Management
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="{{ url_for('division_logs') }}">
+                                <i class="fas fa-clipboard-list"></i> System Logs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('division_equipment') }}">
+                                <i class="fas fa-tools"></i> Equipment
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('division_profile') }}">
+                                <i class="fas fa-user-cog"></i> Profile & Settings
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 main-content">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2 class="mb-0">
+                        <i class="fas fa-clipboard-list me-2 text-danger"></i>System Logs & Audit
+                    </h2>
+                    <div class="text-muted">
+                        Division: {{ division_name }}
+                    </div>
+                </div>
+
+                <!-- Log Type Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card" data-log-type="security">
+                        <span class="stat-number">{{ stats.security_logs }}</span>
+                        <span class="stat-label">Security Logs</span>
+                    </div>
+                    <div class="stat-card" data-log-type="issue">
+                        <span class="stat-number">{{ stats.issue_logs }}</span>
+                        <span class="stat-label">Issue Audit</span>
+                    </div>
+                    <div class="stat-card" data-log-type="user">
+                        <span class="stat-number">{{ stats.user_logs }}</span>
+                        <span class="stat-label">User Activity</span>
+                    </div>
+                    <div class="stat-card" data-log-type="signup">
+                        <span class="stat-number">{{ stats.new_signups }}</span>
+                        <span class="stat-label">User Signups</span>
+                    </div>
+                    <div class="stat-card" data-log-type="worker">
+                        <span class="stat-number">{{ stats.worker_logs }}</span>
+                        <span class="stat-label">Worker Activity</span>
+                    </div>
+                    <div class="stat-card" data-log-type="equipment">
+                        <span class="stat-number">{{ stats.equipment_logs }}</span>
+                        <span class="stat-label">Equipment Logs</span>
+                    </div>
+                </div>
+
+                <!-- Dynamic Filters Container -->
+                <div id="dynamicFiltersContainer" class="dynamic-filters-container" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0 text-danger" id="filtersTitle">Select a log type to view filters</h5>
+                        <div>
+                            <button class="btn btn-outline-secondary btn-sm me-2" onclick="clearAllFilters()">
+                                <i class="fas fa-times me-1"></i> Clear All Filters
+                            </button>
+                            <button class="btn btn-msedcl btn-sm" onclick="applyFilters()">
+                                <i class="fas fa-filter me-1"></i> Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Dynamic Filters Row -->
+                    <div id="dynamicFilters" class="dynamic-filters-row">
+                        <!-- Filters will be loaded here dynamically -->
+                    </div>
+                    
+                    <!-- Common Filters -->
+                    <div class="common-filters">
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <label class="form-label">Date From</label>
+                                <input type="date" class="form-control" id="dateFromFilter">
+                            </div>
+                            <div class="filter-group">
+                                <label class="form-label">Date To</label>
+                                <input type="date" class="form-control" id="dateToFilter">
+                            </div>
+                            <div class="filter-group">
+                                <label class="form-label">Search</label>
+                                <input type="text" class="form-control" id="searchFilter" placeholder="Search in logs...">
+                            </div>
+                            <div class="filter-group">
+                                <label class="form-label">Results Limit</label>
+                                <select class="form-select" id="limitFilter">
+                                    <option value="50">50 records</option>
+                                    <option value="100" selected>100 records</option>
+                                    <option value="200">200 records</option>
+                                    <option value="500">500 records</option>
+                                </select>
+                            </div>
+                            <div class="export-buttons">
+                                <button class="btn btn-outline-primary" onclick="exportLogs()">
+                                    <i class="fas fa-download me-1"></i> Export
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading Spinner -->
+                <div id="loadingSpinner" class="loading-spinner">
+                    <div class="spinner-border text-danger" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading logs...</p>
+                </div>
+
+                <!-- Logs Display Area -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0" id="logsTitle">Select a log type to view data</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="logsDisplayArea">
+                            <div class="text-center text-muted py-5">
+                                <i class="fas fa-clipboard-list fa-3x mb-3"></i>
+                                <p>Select a log type from the cards above to view detailed logs</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Current active log type and filters
+        let currentLogType = '';
+        let currentFilters = {};
+        let allLogsData = {};
+
+        // Filter templates for each log type
+        const filterTemplates = {
+            security: `
+                <div class="filter-group">
+                    <label class="form-label">Email</label>
+                    <input type="text" class="form-control filter-input" data-column="email" placeholder="Filter by email...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">IP Address</label>
+                    <input type="text" class="form-control filter-input" data-column="ip_address" placeholder="Filter by IP...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">User Type</label>
+                    <select class="form-select filter-input" data-column="user_type">
+                        <option value="">All Types</option>
+                        <option value="Division Head">Division Head</option>
+                        <option value="Worker">Worker</option>
+                        <option value="User">User</option>
+                      
+                    </select>
+                </div>
+            `,
+            issue: `
+                <div class="filter-group">
+                    <label class="form-label">Issue ID</label>
+                    <input type="number" class="form-control filter-input" data-column="issue_id" placeholder="Filter by issue ID...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Action Type</label>
+                    <select class="form-select filter-input" data-column="action_type">
+                        <option value="">All Actions</option>
+                        <option value="CREATED">Created</option>
+                        <option value="UPDATED">Updated</option>
+                        <option value="VIEWED">Viewed</option>
+                        <option value="STATUS_CHANGED">Status Changed</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Changed By User</label>
+                    <input type="text" class="form-control filter-input" data-column="changed_by_name" placeholder="Filter by user name...">
+                </div>
+            `,
+            user: `
+                <div class="filter-group">
+                    <label class="form-label">User ID</label>
+                    <input type="number" class="form-control filter-input" data-column="user_id" placeholder="Filter by user ID...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">User Name</label>
+                    <input type="text" class="form-control filter-input" data-column="user_name" placeholder="Filter by user name...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Action Type</label>
+                    <select class="form-select filter-input" data-column="action_type">
+                        <option value="">All Actions</option>
+                        <option value="PROFILE_UPDATED">Profile Updated</option>
+                        <option value="PASSWORD_CHANGED">Password Changed</option>
+                        <option value="EMAIL_CHANGED">Email Changed</option>
+                    </select>
+                </div>
+            `,
+            signup: `
+                <div class="filter-group">
+                    <label class="form-label">User ID</label>
+                    <input type="number" class="form-control filter-input" data-column="user_id" placeholder="Filter by user ID...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">User Name</label>
+                    <input type="text" class="form-control filter-input" data-column="user_name" placeholder="Filter by user name...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">City</label>
+                    <input type="text" class="form-control filter-input" data-column="city" placeholder="Filter by city...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Pincode</label>
+                    <input type="text" class="form-control filter-input" data-column="pincode" placeholder="Filter by pincode...">
+                </div>
+            `,
+            worker: `
+                <div class="filter-group">
+                    <label class="form-label">Worker ID</label>
+                    <input type="number" class="form-control filter-input" data-column="worker_id" placeholder="Filter by worker ID...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Worker Name</label>
+                    <input type="text" class="form-control filter-input" data-column="worker_name" placeholder="Filter by worker name...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Action Type</label>
+                    <select class="form-select filter-input" data-column="action_type">
+                        <option value="">All Actions</option>
+                        <option value="Profile Update">Profile Update</option>
+                        <option value="Equipment Request">Equipment Request</option>
+                        <option value="Attendance Marked">Attendance Marked</option>
+                        <option value="Leave Applied">Leave Applied</option>
+                        <option value="Issue Status Updated">Issue Status Updated</option>
+                    </select>
+                </div>
+            `,
+            equipment: `
+                <div class="filter-group">
+                    <label class="form-label">Equipment ID</label>
+                    <input type="number" class="form-control filter-input" data-column="equipment_id" placeholder="Filter by equipment ID...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Equipment Name</label>
+                    <input type="text" class="form-control filter-input" data-column="name_of_equipment" placeholder="Filter by equipment name...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Worker Name</label>
+                    <input type="text" class="form-control filter-input" data-column="worker_name" placeholder="Filter by worker name...">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Action Type</label>
+                    <select class="form-select filter-input" data-column="action_type">
+                        <option value="">All Actions</option>
+                        <option value="requested">Requested</option>
+                        <option value="issued">Issued</option>
+                        <option value="returned">Returned</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="added">Added</option>
+                        <option value="updated">Updated</option>
+                    </select>
+                </div>
+            `
+        };
+
+        // Column definitions for each log type
+        const columnDefinitions = {
+            security: [
+                { key: 'attempt_id', title: 'Attempt ID', sortable: true },
+                { key: 'email', title: 'Email', sortable: true, filterable: true },
+                { key: 'attempted_at', title: 'Attempt Time', sortable: true },
+                { key: 'ip_address', title: 'IP Address', sortable: true, filterable: true },
+                { key: 'user_type', title: 'User Type', sortable: true, filterable: true }
+            ],
+            issue: [
+                { key: 'log_id', title: 'Log ID', sortable: true },
+                { key: 'issue_id', title: 'Issue ID', sortable: true, filterable: true },
+                { key: 'action_type', title: 'Action', sortable: true, filterable: true },
+                { key: 'changed_by_name', title: 'Changed By', sortable: true, filterable: true },
+                { key: 'changed_at', title: 'Changed At', sortable: true }
+            ],
+            user: [
+                { key: 'audit_id', title: 'Audit ID', sortable: true },
+                { key: 'user_id', title: 'User ID', sortable: true, filterable: true },
+                { key: 'user_name', title: 'User Name', sortable: true, filterable: true },
+                { key: 'action_type', title: 'Action', sortable: true, filterable: true },
+                { key: 'changed_at', title: 'Changed At', sortable: true }
+            ],
+            signup: [
+                { key: 'log_id', title: 'Log ID', sortable: true },
+                { key: 'user_id', title: 'User ID', sortable: true, filterable: true },
+                { key: 'user_name', title: 'User Name', sortable: true, filterable: true },
+                { key: 'signup_time', title: 'Signup Time', sortable: true },
+                { key: 'city', title: 'City', sortable: true, filterable: true },
+                { key: 'pincode', title: 'Pincode', sortable: true, filterable: true }
+            ],
+            worker: [
+                { key: 'log_id', title: 'Log ID', sortable: true },
+                { key: 'worker_id', title: 'Worker ID', sortable: true, filterable: true },
+                { key: 'worker_name', title: 'Worker Name', sortable: true, filterable: true },
+                { key: 'action_type', title: 'Action', sortable: true, filterable: true },
+                { key: 'description', title: 'Description', sortable: true },
+                { key: 'created_at', title: 'Created At', sortable: true }
+            ],
+            equipment: [
+                { key: 'log_id', title: 'Log ID', sortable: true },
+                { key: 'equipment_id', title: 'Equipment ID', sortable: true, filterable: true },
+                { key: 'name_of_equipment', title: 'Equipment Name', sortable: true, filterable: true },
+                { key: 'worker_name', title: 'Worker', sortable: true, filterable: true },
+                { key: 'action_type', title: 'Action', sortable: true, filterable: true },
+                { key: 'head_name', title: 'Action By', sortable: true },
+                { key: 'created_at', title: 'Created At', sortable: true }
+            ]
+        };
+
+        // Filter titles
+        const filterTitles = {
+            security: 'Security Logs Filters',
+            issue: 'Issue Audit Logs Filters',
+            user: 'User Activity Logs Filters',
+            signup: 'User Signup Logs Filters',
+            worker: 'Worker Activity Logs Filters',
+            equipment: 'Equipment Logs Filters'
+        };
+
+        // Log titles
+        const logTitles = {
+            security: 'Security Logs - Failed Login Attempts',
+            issue: 'Issue Audit Logs',
+            user: 'User Activity Logs',
+            signup: 'User Signup Logs',
+            worker: 'Worker Activity Logs',
+            equipment: 'Equipment Logs'
+        };
+
+        async function showLogType(type) {
+            currentLogType = type;
+            
+            // Update active card
+            document.querySelectorAll('.stat-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            // Show filters container
+            const filtersContainer = document.getElementById('dynamicFiltersContainer');
+            filtersContainer.style.display = 'block';
+            
+            // Update filters title
+            document.getElementById('filtersTitle').textContent = filterTitles[type] || 'Logs Filters';
+            document.getElementById('logsTitle').textContent = logTitles[type] || 'Logs';
+            
+            // Load dynamic filters
+            const dynamicFilters = document.getElementById('dynamicFilters');
+            dynamicFilters.innerHTML = filterTemplates[type] || '';
+            
+            // Clear previous filters
+            currentFilters = {};
+            clearAllFilters();
+            
+            // Load logs data
+            await loadLogsData(type);
+        }
+
+        function clearAllFilters() {
+            // Clear all filter inputs
+            document.getElementById('dateFromFilter').value = '';
+            document.getElementById('dateToFilter').value = '';
+            document.getElementById('searchFilter').value = '';
+            document.getElementById('limitFilter').value = '100';
+            
+            // Clear dynamic filters
+            document.querySelectorAll('.filter-input').forEach(input => {
+                if (input.type === 'text' || input.type === 'number') {
+                    input.value = '';
+                } else if (input.tagName === 'SELECT') {
+                    input.selectedIndex = 0;
+                }
+            });
+            
+            currentFilters = {};
+            
+            // Reload data without filters
+            if (currentLogType) {
+                loadLogsData(currentLogType);
+            }
+        }
+
+        async function applyFilters() {
+            // Collect common filters
+            const dateFrom = document.getElementById('dateFromFilter').value;
+            const dateTo = document.getElementById('dateToFilter').value;
+            const search = document.getElementById('searchFilter').value;
+            const limit = document.getElementById('limitFilter').value;
+
+            currentFilters = {
+                date_from: dateFrom,
+                date_to: dateTo,
+                search: search,
+                limit: limit
+            };
+
+            // Collect dynamic filters
+            document.querySelectorAll('.filter-input').forEach(input => {
+                const column = input.getAttribute('data-column');
+                const value = input.value.trim();
+                if (value) {
+                    currentFilters[column] = value;
+                }
+            });
+
+            // Load data with filters
+            await loadLogsData(currentLogType);
+        }
+
+        async function loadLogsData(logType) {
+            showLoading(true);
+            
+            try {
+                const params = new URLSearchParams({
+                    log_type: logType,
+                    ...currentFilters
+                });
+
+                const response = await fetch(`/api/division/logs-data?${params}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    allLogsData[logType] = result.data;
+                    displayLogsTable(logType, result.data);
+                } else {
+                    showError('Failed to load logs: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                showError('Error loading logs data');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function displayLogsTable(logType, data) {
+            const displayArea = document.getElementById('logsDisplayArea');
+            const columns = columnDefinitions[logType] || [];
+
+            if (!data || data.length === 0) {
+                displayArea.innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>No logs found matching your criteria</p>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="clearAllFilters()">
+                            Clear Filters
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            let tableHTML = `
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover logs-table">
+                        <thead>
+                            <tr>
+            `;
+
+            // Create header row
+            columns.forEach(col => {
+                tableHTML += `<th onclick="sortTable('${col.key}')">
+                    ${col.title}
+                    ${col.sortable ? '<i class="fas fa-sort filter-indicator"></i>' : ''}
+                </th>`;
+            });
+
+            tableHTML += `</tr></thead><tbody>`;
+
+            // Create data rows
+            data.forEach(log => {
+                tableHTML += `<tr>`;
+                columns.forEach(col => {
+                    const value = log[col.key] || '';
+                    tableHTML += `<td>${formatCellValue(value)}</td>`;
+                });
+                tableHTML += `</tr>`;
+            });
+
+            tableHTML += `</tbody></table></div>`;
+            tableHTML += `<div class="mt-2 text-muted">Showing ${data.length} records</div>`;
+
+            displayArea.innerHTML = tableHTML;
+        }
+
+        function formatCellValue(value) {
+            if (value === null || value === undefined) return '-';
+            if (typeof value === 'object') return JSON.stringify(value);
+            if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+            return value;
+        }
+
+        function sortTable(columnKey) {
+            if (!allLogsData[currentLogType]) return;
+
+            const data = [...allLogsData[currentLogType]];
+            const isCurrentlySorted = currentFilters.sort === columnKey;
+            const sortOrder = isCurrentlySorted && currentFilters.order === 'asc' ? 'desc' : 'asc';
+
+            data.sort((a, b) => {
+                let aVal = a[columnKey];
+                let bVal = b[columnKey];
+
+                if (aVal === null) aVal = '';
+                if (bVal === null) bVal = '';
+
+                if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+                if (sortOrder === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+
+            currentFilters.sort = columnKey;
+            currentFilters.order = sortOrder;
+            allLogsData[currentLogType] = data;
+            displayLogsTable(currentLogType, data);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loadingSpinner').style.display = show ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            const displayArea = document.getElementById('logsDisplayArea');
+            displayArea.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    ${message}
+                </div>
+            `;
+        }
+
+        function exportLogs() {
+            if (!currentLogType) {
+                alert('Please select a log type first');
+                return;
+            }
+
+            const params = new URLSearchParams({
+                log_type: currentLogType,
+                ...currentFilters,
+                export: 'true'
+            });
+
+            window.location.href = `/api/division/export-logs?${params}`;
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up click handlers for all stat cards
+            document.querySelectorAll('.stat-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    const logType = this.getAttribute('data-log-type');
+                    showLogType(logType);
+                });
+            });
+
+            // Set up enter key for filter inputs
+            document.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    applyFilters();
+                }
+            });
+        });
+        function exportLogs() {
+    if (!currentLogType) {
+        alert('Please select a log type first');
+        return;
+    }
+
+    const params = new URLSearchParams({
+        log_type: currentLogType,
+        ...currentFilters
+        // Remove the export parameter as it's not needed
+    });
+
+    // Create a temporary link to trigger download
+    const downloadLink = document.createElement('a');
+    downloadLink.href = `/api/division/export-logs?${params}`;
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+}
+
+async function loadLogsData(logType) {
+    showLoading(true);
+    
+    try {
+        const params = new URLSearchParams({
+            log_type: logType,
+            ...currentFilters
+        });
+
+        console.log('Loading logs with params:', params.toString()); // DEBUG
+
+        const response = await fetch(`/api/division/logs-data?${params}`);
+        const result = await response.json();
+
+        console.log('API Response:', result); // DEBUG
+
+        if (result.success) {
+            allLogsData[logType] = result.data;
+            console.log('Loaded data:', result.data); // DEBUG
+            displayLogsTable(logType, result.data);
+        } else {
+            showError('Failed to load logs: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error loading logs:', error);
+        showError('Error loading logs data: ' + error.message);
+    } finally {
+        showLoading(false);
+    }
+}
+    </script>
+</body>
+</html>

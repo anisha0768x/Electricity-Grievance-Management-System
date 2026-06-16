@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance - MSEDCL Worker Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='worker_attendance.css') }}" rel="stylesheet">
+     <style>
+    /* TEMPORARY FIX FOR PROGRESS BAR */
+    .progress.attendance-progress {
+        height: 25px !important;
+        width: 100% !important;
+    }
+    .progress.attendance-progress .progress-bar {
+        width: var(--progress-width, 0%) !important;
+        line-height: 25px !important;
+        font-weight: bold !important;
+        font-size: 14px !important;
+    }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+     
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('worker_dashboard') }}">
+                <i class="fas fa-bolt me-2"></i>
+                MSEDCL Worker Portal
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text me-3">
+                    <i class="fas fa-user me-1"></i> {{ user_name }}
+                </span>
+                <a class="nav-link" href="/logout">
+                    <i class="fas fa-sign-out-alt me-1"></i> Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 sidebar p-0">
+                <div class="d-flex flex-column p-3">
+                    <ul class="nav nav-pills flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('worker_dashboard') }}">
+                                <i class="fas fa-tachometer-alt"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="{{ url_for('worker_attendance') }}">
+                                <i class="fas fa-calendar-check"></i> Attendance
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('worker_tasks') }}">
+                                <i class="fas fa-tasks"></i> My Tasks
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('worker_equipment') }}">
+                                <i class="fas fa-tools"></i> Equipment
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('worker_leave') }}">
+                                <i class="fas fa-umbrella-beach"></i> Leave
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('worker_profile') }}">
+                                <i class="fas fa-user"></i> Profile
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2 class="mb-0">
+                        <i class="fas fa-calendar-check me-2 text-danger"></i>Attendance Management
+                    </h2>
+                </div>
+
+                <div class="row">
+                    <!-- Left Column - Mark Attendance -->
+                   <!-- Left Column - Mark Attendance -->
+<div class="col-lg-6">
+    <div class="attendance-form">
+        <h4 class="mb-4"><i class="fas fa-edit me-2 text-danger"></i>Today's Attendance</h4>
+        
+        <!-- Current Status Display -->
+        <div class="card mb-4">
+            <div class="card-body text-center">
+                <h5 id="currentStatus" class="card-title">Loading...</h5>
+                <p id="statusMessage" class="card-text text-muted"></p>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons" id="actionButtons">
+            <!-- Buttons will be dynamically shown based on status -->
+        </div>
+
+        <!-- Manual Override (For Supervisors/Admins only) -->
+        {% if session.get('user_type') in ['admin', 'supervisor'] %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="fas fa-user-shield me-2"></i>Admin Override
+            </div>
+            <div class="card-body">
+                <form id="adminOverrideForm">
+                    <div class="mb-3">
+                        <label class="form-label">Override Status</label>
+                        <select class="form-select" name="override_status">
+                            <option value="Present">Present</option>
+                            <option value="Absent">Absent</option>
+                            <option value="Leave">Leave</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-warning btn-sm">Override</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+                    <!-- Right Column - Monthly Stats -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-chart-bar me-2"></i>This Month's Summary
+                            </div>
+                            <div class="card-body">
+                                {% if monthly_stats and monthly_stats[0] %}
+                                {% set current_month = monthly_stats[0] %}
+                                {% set attendance_rate = (current_month.present_days / current_month.total_days * 100) if current_month.total_days > 0 else 0 %}
+                                
+                                <div class="stats-grid">
+                                    <div class="stat-card">
+                                        <span class="stat-number">{{ current_month.present_days }}</span>
+                                        <span class="stat-label">Present</span>
+                                    </div>
+                                    <div class="stat-card">
+                                        <span class="stat-number">{{ current_month.absent_days }}</span>
+                                        <span class="stat-label">Absent</span>
+                                    </div>
+                                    <div class="stat-card">
+                                        <span class="stat-number">{{ current_month.leave_days }}</span>
+                                        <span class="stat-label">Leave</span>
+                                    </div>
+                                    <div class="stat-card">
+                                        <span class="stat-number">{{ current_month.total_days }}</span>
+                                        <span class="stat-label">Total</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-4">
+                                    <h6>Attendance Rate</h6>
+                                    <div class="progress attendance-progress">
+                                        <div class="progress-bar bg-success" role="progressbar" 
+                                             data-width="{{ attendance_rate }}"
+                                             aria-valuenow="{{ attendance_rate }}" aria-valuemin="0" aria-valuemax="100">
+                                            {{ "%.1f"|format(attendance_rate) }}%
+                                        </div>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-chart-bar fa-3x mb-3"></i>
+                                    <p>No attendance data available for this month</p>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Recent Months -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <i class="fas fa-history me-2"></i>Recent Months
+                            </div>
+                            <div class="card-body">
+                                {% if monthly_stats %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Month</th>
+                                                <th>Present</th>
+                                                <th>Absent</th>
+                                                <th>Leave</th>
+                                                <th>Rate</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for month in monthly_stats %}
+                                            <tr>
+                                                <td>{{ month.month }}/{{ month.year }}</td>
+                                                <td>{{ month.present_days }}</td>
+                                                <td>{{ month.absent_days }}</td>
+                                                <td>{{ month.leave_days }}</td>
+                                                <td>
+                                                    {% set rate = (month.present_days / month.total_days * 100) if month.total_days > 0 else 0 %}
+                                                    <span class="badge {% if rate >= 90 %}bg-success{% elif rate >= 75 %}bg-warning{% else %}bg-danger{% endif %}">
+                                                        {{ "%.0f"|format(rate) }}%
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <p class="text-muted text-center">No historical data available</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attendance History -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <i class="fas fa-list me-2"></i>Attendance History (Current Month)
+                    </div>
+                    <div class="card-body">
+                        {% if attendance_records %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Day</th>
+                                        <th>Status</th>
+                                        <th>In Time</th>
+                                        <th>Out Time</th>
+                                        <th>Working Hours</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for record in attendance_records %}
+                                    <tr class="attendance-status-{{ record.status|lower }}">
+                                        <td>{{ record.date.strftime('%Y-%m-%d') }}</td>
+                                        <td>{{ record.date.strftime('%A') }}</td>
+                                        <td>
+                                            <span class="badge {% if record.status == 'Present' %}bg-success{% elif record.status == 'Absent' %}bg-danger{% else %}bg-warning{% endif %}">
+                                                {{ record.status }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if record.in_time %}
+                                                {{ record.in_time }}
+                                            {% else %}
+                                                --
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if record.out_time %}
+                                                {{ record.out_time }}
+                                            {% else %}
+                                                --
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if record.working_hours is not none %}
+                                                {{ record.working_hours }} hrs
+                                            {% else %}
+                                                --
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-calendar-times fa-3x mb-3"></i>
+                            <p>No attendance records found for this month</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // ========== WORKER MANAGEMENT FUNCTIONS ==========
+    
+    // Add Worker Function
+    function addWorker() {
+        const formData = new FormData(document.getElementById('addWorkerForm'));
+        
+        fetch('/api/division/add-worker', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Worker added successfully!');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('addWorkerModal'));
+                modal.hide();
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+    }
+
+    // Remove Worker
+    document.querySelectorAll('.remove-worker-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const workerId = this.getAttribute('data-worker-id');
+            const workerName = this.getAttribute('data-worker-name');
+            
+            if (confirm(`Are you sure you want to remove worker ${workerName}? They will be marked as inactive but their records will be preserved.`)) {
+                fetch('/api/division/remove-worker', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `worker_id=${workerId}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Worker removed successfully!');
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error);
+                });
+            }
+        });
+    });
+
+    // View worker details
+    document.querySelectorAll('.view-worker-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const workerId = this.getAttribute('data-worker-id');
+            document.getElementById('detailWorkerId').textContent = workerId;
+            
+            fetch(`/api/division/worker-details/${workerId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('workerDetailsContent').innerHTML = data.html;
+                    } else {
+                        document.getElementById('workerDetailsContent').innerHTML = '<p class="text-danger">Error loading worker details: ' + data.error + '</p>';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('workerDetailsContent').innerHTML = '<p class="text-danger">Error loading worker details</p>';
+                });
+        });
+    });
+
+    // Edit worker functionality
+    document.querySelectorAll('.edit-worker-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const workerId = this.getAttribute('data-worker-id');
+            const workerRow = document.querySelector(`[data-worker-id="${workerId}"]`);
+            
+            if (workerRow) {
+                document.getElementById('editWorkerId').value = workerId;
+                document.getElementById('editName').value = workerRow.querySelector('.fw-bold').textContent;
+                document.getElementById('editEmail').value = workerRow.querySelector('td:nth-child(4) small').textContent;
+                document.getElementById('editPhone').value = workerRow.querySelector('td:nth-child(4) div').textContent;
+                document.getElementById('editAge').value = workerRow.querySelector('td:nth-child(2) small').textContent.replace('Age: ', '') || '';
+                document.getElementById('editWorkerType').value = workerRow.querySelector('.badge').textContent.trim();
+                document.getElementById('editAvailability').value = workerRow.querySelector('td:nth-child(5) .badge').textContent.trim();
+                document.getElementById('editSkills').value = workerRow.querySelector('td:nth-child(8) small').textContent.trim();
+            }
+        });
+    });
+
+    // Update worker
+    function updateWorker() {
+        const formData = new FormData(document.getElementById('editWorkerForm'));
+        
+        fetch('/api/division/update-worker', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Worker updated successfully!');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editWorkerModal'));
+                modal.hide();
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+    }
+
+    // Apply filters
+    function applyFilters() {
+        const type = document.getElementById('workerTypeFilter').value;
+        const availability = document.getElementById('availabilityFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        
+        let url = `?type=${type}&availability=${availability}&status=${status}`;
+        window.location.href = url;
+    }
+
+    // Clear filters
+    function clearFilters() {
+        window.location.href = window.location.pathname;
+    }
+
+    // Export to CSV
+    function exportToCSV(tableId, filename) {
+        const table = document.getElementById(tableId);
+        const rows = table.querySelectorAll('tr');
+        let csv = [];
+        
+        for (let i = 0; i < rows.length; i++) {
+            const row = [];
+            const cols = rows[i].querySelectorAll('td, th');
+            
+            for (let j = 0; j < cols.length; j++) {
+                let text = cols[j].innerText;
+                text = text.replace(/View|Edit|Remove/g, '');
+                row.push(`"${text.trim()}"`);
+            }
+            
+            csv.push(row.join(','));
+        }
+        
+        const csvFile = new Blob([csv.join('\n')], {type: 'text/csv'});
+        const downloadLink = document.createElement('a');
+        downloadLink.download = filename;
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        downloadLink.style.display = 'none';
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+    }
+
+    // ========== LEAVE MANAGEMENT FUNCTIONS ==========
+
+    document.querySelectorAll('.approve-leave-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const leaveId = this.getAttribute('data-leave-id');
+            const workerName = this.getAttribute('data-worker-name');
+            
+            if (confirm(`Approve leave request for ${workerName}?`)) {
+                handleLeaveAction(leaveId, 'approve');
+            }
+        });
+    });
+
+    document.querySelectorAll('.reject-leave-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const leaveId = this.getAttribute('data-leave-id');
+            const workerName = this.getAttribute('data-worker-name');
+            
+            if (confirm(`Reject leave request for ${workerName}?`)) {
+                handleLeaveAction(leaveId, 'reject');
+            }
+        });
+    });
+
+    // FIXED: Proper leave action handling with JSON response checking
+    async function handleLeaveAction(leaveId, action) {
+        try {
+            const formData = new FormData();
+            formData.append('leave_id', leaveId);
+            formData.append('action', action);
+            
+            const response = await fetch('/api/division/handle-leave', {
+                method: 'POST',
+                body: formData
+            });
+            
+            // First check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                // If not JSON, get the text to see what's wrong
+                const text = await response.text();
+                console.error('Non-JSON response:', text.substring(0, 200));
+                throw new Error('Server returned an unexpected response. Please check if you are logged in.');
+            }
+            
+            // If it is JSON, parse it
+            const data = await response.json();
+            
+            if (data.success) {
+                alert(`Leave request ${action}d successfully! ${data.message || ''}`);
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error handling leave action:', error);
+            alert('Request failed: ' + error.message);
+        }
+    }
+
+    // ========== NEW ATTENDANCE SYSTEM ==========
+
+    let currentStatus = '';
+
+    // Load today's attendance status
+    loadAttendanceStatus();
+
+    // Auto-mark attendance daily at midnight
+    autoMarkDailyAttendance();
+
+    async function loadAttendanceStatus() {
+        try {
+            const response = await fetch('/api/today-attendance');
+            const data = await response.json();
+            
+            if (data.success) {
+                currentStatus = data.status;
+                updateAttendanceUI(data);
+            }
+        } catch (error) {
+            console.error('Error loading attendance:', error);
+        }
+    }
+    
+    function updateAttendanceUI(data) {
+        const statusElement = document.getElementById('currentStatus');
+        const messageElement = document.getElementById('statusMessage');
+        const buttonsElement = document.getElementById('actionButtons');
+        
+        if (!statusElement) return; // Only run if on attendance page
+        
+        // Update status display
+        let statusClass = 'text-warning';
+        if (data.status === 'Present') statusClass = 'text-success';
+        if (data.status === 'Absent') statusClass = 'text-danger';
+        if (data.status === 'Leave') statusClass = 'text-info';
+        
+        statusElement.className = `card-title ${statusClass}`;
+        statusElement.textContent = `Status: ${data.status}`;
+        
+        // Update message
+        if (data.auto_marked) {
+            messageElement.textContent = 'Automatically marked by system';
+        } else {
+            messageElement.textContent = 'Manually recorded';
+        }
+        
+        // Update action buttons
+        let buttonsHTML = '';
+        
+        if (data.status === 'Absent') {
+            buttonsHTML = `
+                <button class="btn btn-success btn-lg w-100 mb-2" onclick="checkIn()">
+                    <i class="fas fa-sign-in-alt me-2"></i>Check In
+                </button>
+                <small class="text-muted">Check in to mark yourself as Present</small>
+            `;
+        } else if (data.status === 'Present') {
+            if (data.out_time) {
+                buttonsHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check me-2"></i>
+                        Already checked out at ${data.out_time}
+                    </div>
+                    <div class="text-center">
+                        <strong>Working Hours: ${data.working_hours || '0'} hrs</strong>
+                    </div>
+                `;
+            } else {
+                buttonsHTML = `
+                    <button class="btn btn-warning btn-lg w-100" onclick="checkOut()">
+                        <i class="fas fa-sign-out-alt me-2"></i>Check Out
+                    </button>
+                    <small class="text-muted mt-2 d-block">
+                        In Time: ${data.in_time || 'Not recorded'}
+                    </small>
+                `;
+            }
+        } else if (data.status === 'Leave') {
+            buttonsHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-umbrella-beach me-2"></i>
+                    You are on approved leave today
+                </div>
+            `;
+        } else if (data.status === 'Not Marked') {
+            buttonsHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Attendance not yet marked for today
+                </div>
+                <button class="btn btn-primary btn-lg w-100" onclick="autoMarkAttendance()">
+                    <i class="fas fa-sync me-2"></i>Mark Today's Attendance
+                </button>
+            `;
+        }
+        
+        buttonsElement.innerHTML = buttonsHTML;
+    }
+    
+    // Auto-mark attendance at the start of each day
+    function autoMarkDailyAttendance() {
+        const lastAutoMark = localStorage.getItem('lastAutoMark');
+        const today = new Date().toDateString();
+        
+        if (lastAutoMark !== today) {
+            fetch('/api/auto-mark-attendance', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        localStorage.setItem('lastAutoMark', today);
+                        loadAttendanceStatus(); // Refresh status
+                    }
+                })
+                .catch(console.error);
+        }
+    }
+
+    // Check In function
+    async function checkIn() {
+        try {
+            const response = await fetch('/api/check-in', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.success) {
+                alert('Checked in successfully!');
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            alert('Check-in failed: ' + error.message);
+        }
+    }
+
+    // Check Out function
+    async function checkOut() {
+        if (!confirm('Are you sure you want to check out?')) return;
+        
+        try {
+            const response = await fetch('/api/check-out', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.success) {
+                alert(`Checked out successfully! Working hours: ${data.hours} hrs`);
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            alert('Check-out failed: ' + error.message);
+        }
+    }
+
+    // Manual trigger for auto-marking
+    async function autoMarkAttendance() {
+        try {
+            const response = await fetch('/api/auto-mark-attendance', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            alert('Auto-mark failed: ' + error.message);
+        }
+    }
+
+// ========== INITIALIZATION ==========
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const typeFilter = document.getElementById('workerTypeFilter');
+    const availabilityFilter = document.getElementById('availabilityFilter');
+    const statusFilter = document.getElementById('statusFilter');
+    
+    if (typeFilter) typeFilter.value = urlParams.get('type') || '';
+    if (availabilityFilter) availabilityFilter.value = urlParams.get('availability') || '';
+    if (statusFilter) statusFilter.value = urlParams.get('status') || 'active';
+    
+    // SIMPLE PROGRESS BAR FIX
+    setTimeout(function() {
+        const progressBars = document.querySelectorAll('.progress-bar[data-width]');
+        console.log('Found progress bars:', progressBars.length);
+        
+        progressBars.forEach(bar => {
+            const width = bar.getAttribute('data-width');
+            console.log('Setting width:', width);
+            
+            if (width) {
+                // Method 1: Direct style
+                bar.style.width = width + '%';
+                
+                // Method 2: CSS variable
+                bar.style.setProperty('--progress-width', width + '%');
+                
+                // Method 3: Force update
+                bar.textContent = parseFloat(width).toFixed(1) + '%';
+                
+                console.log('Applied width:', width + '%');
+            }
+        });
+    }, 100);
+});
+</script>
+</body>
+</html>
